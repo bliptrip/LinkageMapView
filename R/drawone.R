@@ -6,6 +6,7 @@ drawone <-
            totwidth,
            yrange,
            denmap = FALSE,
+           noloci = FALSE,
            maxnbrcolsfordups = 3,
            pdf.width = 12,
            pdf.fg = "black",
@@ -35,7 +36,8 @@ drawone <-
            lgtitles = NULL,
            segcol = NULL,
            showonly = NULL,
-           sectcoldf = NULL) {
+           sectcoldf = NULL,
+           jitterloci = NULL) {
     y <- df$position
     rlab <- df$locus
     llab <- df$position
@@ -141,7 +143,7 @@ drawone <-
       solist <- NULL
     }
     # if density map skip all of this
-    if (!denmap) {
+    if (!denmap && !noloci) {
       # find and save dup locations before calling spreadcexlabs
       dups <- fsdups(llab, maxnbrcolsfordups)
 
@@ -219,7 +221,7 @@ drawone <-
           }
         }
       }
-    }  # end skip all of this if denmap
+    }  # end skip all of this if denmap or noloci
 
     # xpd = NA to turn off clipping and arcs can go into margins
     par(xpd = NA)
@@ -249,40 +251,38 @@ drawone <-
     # color sections and color arcs at end same as first and last section
     if (!is.null(sectcoldf)) {
       if (nrow(sectcoldf) > 0) {
-        if (is.null(lg.col)) {
-          if (denmap)
+            if (denmap)
             #lg.col overrides coloring same as adjcent color
-          {
+            {
             symbols(
-              x = pgx,
-              y = min(y),
-              circles = lgwpct / 2,
-              bg = sectcoldf$col[1],
-              add = TRUE,
-              fg = sectcoldf$col[1],
-              inches = FALSE
+                x = pgx,
+                y = min(y),
+                circles = lgwpct / 2,
+                bg = sectcoldf$col[1],
+                add = TRUE,
+                fg = sectcoldf$col[1],
+                inches = FALSE
             )
             symbols(
-              x = pgx,
-              y = max(y),
-              circles = lgwpct / 2,
-              bg = sectcoldf$col[nrow(sectcoldf)],
-              add = TRUE,
-              fg = sectcoldf$col[nrow(sectcoldf)],
-              inches = FALSE
+                x = pgx,
+                y = max(y),
+                circles = lgwpct / 2,
+                bg = sectcoldf$col[nrow(sectcoldf)],
+                add = TRUE,
+                fg = sectcoldf$col[nrow(sectcoldf)],
+                inches = FALSE
             )
-          }
-          for (sc in 1:nrow(sectcoldf)) {
+            }
+            for (sc in 1:nrow(sectcoldf)) {
             rect(
-              pgx - lgwpct / 2,
-              sectcoldf$s,
-              pgx + lgwpct / 2,
-              sectcoldf$e,
-              col = sectcoldf$col,
-              border = NA
+                pgx - lgwpct / 2,
+                sectcoldf$s,
+                pgx + lgwpct / 2,
+                sectcoldf$e,
+                col = sectcoldf$col,
+                border = NA
             )
-          }
-        }
+            }
       }
     }
 
@@ -306,7 +306,7 @@ drawone <-
       lwd = lg.lwd
     )
 
-    if (!denmap) {
+    if (!denmap & !noloci) {
       if (rsegcol) {
         segcolprt <- rcol[setdiff(dups$rkeep, dups$frkeep)]
       }
@@ -406,10 +406,15 @@ drawone <-
 
     } # end don't do this for density map
     else {
+      if( !is.null(jitterloci) ) {
+          yadj <- jitter(y,amount=jitterloci)
+      } else {
+          yadj <- y
+      }
       segments(rep(x1[1], length.out = length(y)),
-               y,
+               yadj,
                rep(x2[1], length.out = length(y)),
-               y,
+               yadj,
                col = linesegcolor)
     }
 
@@ -417,8 +422,9 @@ drawone <-
     # and for drawing qtls
 
 
-    if (denmap) {
+    if (denmap || noloci) {
       yrlabwidth <- rep(strwidth("M", units = "inches"),length(y))
+      #yrlabwidth <- rep(0,length(y))
       adjyr <- y
       adjyl <- y
       dups <- NULL

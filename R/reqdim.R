@@ -6,6 +6,7 @@ reqdim <- function(df,
                    yrange,
                    pdf.width = 12,
                    denmap = FALSE,
+                   noloci = FALSE,
                    maxnbrcolsfordups = 3,
                    lgw = 0.25,
                    pgx = 0.5 ,
@@ -85,7 +86,7 @@ reqdim <- function(df,
   }
 
   yrlabwidth <- vector(length = length(llab))
-  if (!denmap) {
+  if (!denmap && !noloci) {
     # find dups to figure out how many columns to reserve space for
     dups <- fsdups(llab, maxnbrcolsfordups)
 
@@ -135,7 +136,7 @@ reqdim <- function(df,
         max(
           sum(strheight(llab[dups$rkeep], units = "inches") * lcex[dups$rkeep] * 1.4),
           sum(strheight(rlab[dups$rkeep], units = "inches") * rcex[dups$rkeep] * 1.4),
-          sum(strheight(llab[dups$rkeep], units = "inches") * rcex[dups$rkeep] * 1.4)
+          sum(strheight(llab[dups$rkeep], units = "inches") * rcex[dups$rkeep] * 1.4),
         ) # because positions spread like markers
     }
     else {
@@ -164,7 +165,7 @@ reqdim <- function(df,
     reqwidth <-
       sum(
         max(
-          lgw ,
+          lgw,
           strwidth(df$group, units = "inches") * cex.lgtitle + strwidth("M", units = "inches") *
             cex.lgtitle
         ),
@@ -173,6 +174,20 @@ reqdim <- function(df,
       )
   }
 
+  if (nrow(qtldf) > 0) { #Adjust height as needed for QTL labels/intervals
+      inchesPerUserUnit <- grconvertY(0, from = "user", to = "inches") - grconvertY(1, from = "user", to = "inches") #In this case a 'user unit' equals around 1 centiMorgans.
+      lablens <- strwidth(qtldf$qtl, units = "inches")
+      lablenYs <- lablens/inchesPerUserUnit
+      qtlstart <- qtldf$so
+      qtlend <- qtldf$eo
+      llenflanks <- (lablenYs > (qtldf$eo - qtldf$so))
+      qtlstart[llenflanks] <- ((qtldf$si[llenflanks] + qtldf$ei[llenflanks]) - lablenYs[llenflanks])/2
+      qtlend[llenflanks] <- ((qtldf$si[llenflanks] + qtldf$ei[llenflanks]) + lablenYs[llenflanks])/2
+      minqtlstart <- min(qtlstart)
+      maxqtlend <- max(qtlend)
+      reqqtlheight <- (maxqtlend - minqtlstart)*inchesPerUserUnit
+      reqheight <- max(reqheight,reqqtlheight)
+  }
   # give a margin at top and bottom for chromosome ends and margins
   reqheight = reqheight + lgw + par("mai")[1] + par("mai")[3]
 
@@ -182,5 +197,4 @@ reqdim <- function(df,
     maxlenrlab = max(yrlabwidth),
     maxlenllab = max(strwidth(llab, units = "inches") * lcex)
   )
-
 }

@@ -27,14 +27,14 @@ show <- function(showonly,
   # not be in order, sort them.  that also removes the NA since the
   # showonly might not be in this linkage group
 
-  newllab <- append(newllab, llab[sort(match(showonly, rlab))])
-  newrlab <- append(newrlab, rlab[sort(match(showonly, rlab))])
-  newrcex <- append(newrcex, rcex[sort(match(showonly, rlab))])
-  newlcex <- append(newlcex, lcex[sort(match(showonly, rlab))])
-  newrfont <- append(newrfont, rfont[sort(match(showonly, rlab))])
-  newlfont <- append(newlfont, lfont[sort(match(showonly, rlab))])
-  newrcol <- append(newrcol, rcol[sort(match(showonly, rlab))])
-  newlcol <- append(newlcol, lcol[sort(match(showonly, rlab))])
+  newllab <- append(newllab, llab[sort(which(rlab %in% showonly))])
+  newrlab <- append(newrlab, rlab[sort(which(rlab %in% showonly))])
+  newrcex <- append(newrcex, rcex[sort(which(rlab %in% showonly))])
+  newlcex <- append(newlcex, lcex[sort(which(rlab %in% showonly))])
+  newrfont <- append(newrfont, rfont[sort(which(rlab %in% showonly))])
+  newlfont <- append(newlfont, lfont[sort(which(rlab %in% showonly))])
+  newrcol <- append(newrcol, rcol[sort(which(rlab %in% showonly))])
+  newlcol <- append(newlcol, lcol[sort(which(rlab %in% showonly))])
 
 
   # always show the first and last position label

@@ -15,7 +15,10 @@
 #'              at this marker.  See also segcol parameter.
 #'      }
 #'
-#' @param outfile Required, name for the output pdf file.
+#' @param outfile Required, name for the output pdf file.  
+#'
+#' @param dev.keepopen Optional.  Boolean that specifies whether to keep the pdf device open
+#'          for further editing.  Default is FALSE.
 #'
 #' @param mapthese Optional vector of linkage group names to print.
 #'        The default, NULL, will print all linkage groups in mapthis.
@@ -61,9 +64,19 @@
 #'        or position labels will be printed and the following parameters are
 #'        set:
 #'        ruler = TRUE
-#'        autoconndf = FALSE
+#'        autoconnadj = FALSE
 #'        conndf = NULL
 #'        See also sectcoldf parameter
+#'
+#' @param noloci If TRUE, does not display loci or position labels.  If this is set 
+#'        to TRUE, then the following parameters are set:
+#'        denmap = FALSE
+#'        ruler = TRUE
+#'        autoconnadj = FALSE
+#'        conndf = NULL
+#'        See also sectcoldf parameter
+#'
+#'        Default: FALSE
 #'
 #' @param dupnbr If TRUE, only the first marker name at a position will print
 #'        with (## more) afterwards indicating the number of duplicate markers
@@ -150,6 +163,10 @@
 #' @param maxnbrcolsfordups Indicates the number of columns across the page for
 #'        locus labels appearing at duplicate positions.  The default is 3.
 #'
+#' @param render.type  Indicates the output format for the generated graphic.
+#'        Valid options are 'pdf', 'svg'.
+#'        Default is 'pdf'.
+#'
 #' @param pdf.bg Background color for the pdf.  Default is "transparent".
 #'
 #' @param pdf.family Font family for all text.  Default is "Helvetica".
@@ -166,6 +183,14 @@
 #'        "LinkageMapView R output".
 #'
 #' @param pdf.width Width of the output file in inches.  Defaults to the size
+#' necessary to fit all linkage groups with other options specified.
+#'
+#' @param lg.minheight Minimum height in inches of the linkage group blocks.  This
+#'          supersedes pdf.height when denmap or noloci are set to TRUE, as setting
+#'          pdf.height alone isn't enough to force the linkage groups to render in
+#'          size wanted (b/c of relative size differences with the legend plots).
+#'          Default is NULL, which defers to value for pdf.height.
+#'
 #' necessary to fit all linkage groups with other options specified.
 #'
 #' @param posonleft A vector of boolean (TRUE or FALSE) the length of the
@@ -248,6 +273,17 @@
 #'
 #' @param ylab Optional.  Title for the y-axis (ruler).  The default value is
 #'        units.  See units parameter.
+#'
+#' @param lg.lims Optional.  Hardcode the lower and upper limits for the linkage
+#'          group coordinates for ruler.  Default is NULL, which means it is 
+#'          auto-calculated.  Setting this will have all rows displaying linkage
+#'          groups the same height, with linkage groups scaled the same relative
+#'          to each other.
+#'
+#' @param jitterloci Optional.  Maximal amount of jitter to introduce to loci segments
+#'         when denmap or noloci are TRUE.
+#'         Default is NULL, which means no jitter is introduced.
+#'          
 #'
 #' @export
 #'
@@ -414,7 +450,8 @@
 
 
 lmv.linkage.plot <- function(mapthis,
-                outfile,
+                outfile = NULL,
+                dev.keepopen = FALSE,
                 mapthese = NULL,
                 at.axis = NULL,
                 autoconnadj = TRUE,
@@ -426,6 +463,7 @@ lmv.linkage.plot <- function(mapthis,
                 col.main = par("col.main"),
                 conndf = NULL,
                 denmap = FALSE,
+                noloci = FALSE,
                 dupnbr = FALSE,
                 font.axis = par("font.axis"),
                 font.lgtitle = par("font.main"),
@@ -447,6 +485,7 @@ lmv.linkage.plot <- function(mapthis,
                 main = NULL,
                 markerformatlist = NULL,
                 maxnbrcolsfordups = 3,
+                render.type = 'pdf',
                 pdf.bg = "transparent",
                 pdf.family = "Helvetica",
                 pdf.fg = "black",
@@ -454,6 +493,7 @@ lmv.linkage.plot <- function(mapthis,
                 pdf.height = NULL,
                 pdf.pointsize = 12,
                 pdf.title = "LinkageMapView R output",
+                lg.minheight = NULL,
                 posonleft = NULL,
                 prtlgtitles = TRUE,
                 qtldf = NULL,
@@ -469,7 +509,9 @@ lmv.linkage.plot <- function(mapthis,
                 qtlscanone = NULL,
                 showonly = NULL,
                 units = "cM",
-                ylab = units
+                ylab = units,
+                lg.lims = NULL,
+                jitterloci = NULL
                 )
 
 {
@@ -478,7 +520,9 @@ lmv.linkage.plot <- function(mapthis,
 
   oldpar <-
     par(no.readonly = TRUE)   # save parameters for restoring
-  on.exit(par(oldpar))
+  if( !dev.keepopen ) {
+    on.exit(par(oldpar))
+  }
 
   # ----------------- Begin edit arguments -----------------------------------
   if (!is.null(roundpos)) {
@@ -544,13 +588,16 @@ lmv.linkage.plot <- function(mapthis,
 
   nbrrows <- ceiling(length(mapthese) / lgperrow)
 
-  if (denmap) {
+  if (denmap || noloci) {
     autoconnadj <- FALSE
     rsegcol <- FALSE
     ruler <- TRUE
     showonly <- NULL
     markerformatlist <- NULL
     conndf <- NULL
+  }
+  if (noloci) {
+    denmap = FALSE
   }
 
   # user can specify colors for segments
@@ -687,20 +734,50 @@ lmv.linkage.plot <- function(mapthis,
 
   # ------------- End set par options --------------------
 
-  pdf.options(
-    bg = pdf.bg,
-    title = pdf.title,
-    family = pdf.family,
-    pointsize = pdf.pointsize,
-    fg = pdf.fg
-  )
-  on.exit(pdf.options(reset = TRUE), add = TRUE)
+    if( render.type == "pdf" ) {
+        pdf.options(
+            bg = pdf.bg,
+            title = pdf.title,
+            family = pdf.family,
+            pointsize = pdf.pointsize,
+            fg = pdf.fg
+        )
+        if(!dev.keepopen) {
+            on.exit(pdf.options(reset = TRUE), add = TRUE)
+        }
+    }
+        
 
-  # pdf size doesn't matter here - just for reqdim plotting
-  # pdf will be reallocated before actually drawing
-
-  pdf(outfile, width = 30, height = 30)
-  on.exit(dev.off(), add = TRUE)
+    # pdf/svg size doesn't matter here - just for reqdim plotting
+    # pdf/svg will be reallocated before actually drawing
+    if( (noloci || denmap) && lg.minheight )
+    {
+        initheight = lg.minheight + par("omi")[1] + par("omi")[3]
+    } 
+    else {
+        initheight = 30
+    }
+    if( render.type == "pdf" ) {
+        pdf(outfile, width=30, height=initheight)
+    } else if( render.type == "svg" ) {
+        svg(outfile,
+            width=30, 
+            height=initheight,
+            bg=pdf.bg,
+            family=pdf.family,
+            pointsize=pdf.pointsize)
+    } else {
+        png(outfile,
+            width=30,
+            height=initheight,
+            units="in",
+            bg=pdf.bg,
+            pointsize=pdf.pointsize,
+            res=300)
+    }
+    if(!dev.keepopen) {
+        on.exit(dev.off(), add = TRUE)
+    }
 
   par(mar = c(0, leftmar, topmar, 0),oma = c(1, 0, topoma, 1),new=FALSE)
 
@@ -866,6 +943,7 @@ lmv.linkage.plot <- function(mapthis,
       lg[[i]],
       c(miny[nr], maxy[nr]),
       denmap = denmap,
+      noloci = noloci,
       maxnbrcolsfordups = maxnbrcolsfordups,
       pdf.width = 30,
       labdist = labdist,
@@ -915,14 +993,27 @@ lmv.linkage.plot <- function(mapthis,
   }
 
   allrowwidth <- max(totwidth)
+  totheights <- sum(totheight)
+  if( (denmap || noloci) && !is.null(lg.minheight) ) {
+      lgheight = max(lg.minheight,totheights)
+  } else {
+      lgheight = totheights
+  }
   if (denmap & !is.null(sectcoldf$dens)) {
     # add a one 1/2 inch row for density map legend
-    allrowheight <- sum(totheight) + 1.5
+    allrowheight <- lgheight + 1.5
     relheight <- vector(length = (nbrrows + 1))
     relheight[(nbrrows + 1)] <- 1.5 / allrowheight
   }
+  else if(noloci & !is.null(mapthis$segcol)) {
+    legend_seg_height = lgw
+    addheight = legend_seg_height + max(strwidth(unique(mapthis$locus),units="inch")) + 0.25
+    allrowheight <- lgheight + addheight
+    relheight <- vector(length = (nbrrows + 1))
+    relheight[(nbrrows + 1)] <- addheight / allrowheight
+  }
   else {
-    allrowheight <- sum(totheight)
+    allrowheight <- lgheight
     relheight <- vector(length = nbrrows)
   }
 
@@ -939,12 +1030,12 @@ lmv.linkage.plot <- function(mapthis,
         maxrowheight <- dim[[i]]$reqheight
       }
     }
-    relheight[nr] <- maxrowheight / allrowheight
+    relheight[nr] <- (lgheight*(maxrowheight/totheights)) / allrowheight #Rescale maxrowheight based on the required lgheight vs. calculated height
   }
 
   # add in margins
   allrowwidth <- allrowwidth + par("mai")[2] + par("mai")[4] + par("omi")[2] + par("omi")[4]
-  allrowheight <- allrowheight + par("omi")[2] + par("omi")[4]
+  allrowheight <- allrowheight + par("omi")[1] + par("omi")[3]
 
   # if user did not specify size, set to required size
   if (is.null(pdf.width)) {
@@ -962,19 +1053,38 @@ lmv.linkage.plot <- function(mapthis,
 
   # turn off pdf used just for sizing and start the real one
   dev.off()
-  pdf.options(
-    bg = pdf.bg,
-    title = pdf.title,
-    family = pdf.family,
-    pointsize = pdf.pointsize,
-    fg = pdf.fg
-  )
+  if( render.type == "pdf" ) {
+    pdf.options(
+        bg = pdf.bg,
+        title = pdf.title,
+        family = pdf.family,
+        pointsize = pdf.pointsize,
+        fg = pdf.fg
+    )
 
-  pdf(outfile, width = pdf.width, height = pdf.height)
+    pdf(outfile, width = pdf.width, height = pdf.height)
+  } else if( render.type == 'svg' ) {
+    svg(outfile,
+        width=pdf.width, 
+        height=pdf.height,
+        bg=pdf.bg,
+        family=pdf.family,
+        pointsize=pdf.pointsize)
+  } else {
+    png(outfile,
+        width=pdf.width,
+        height=,
+        units="in",
+        bg=pdf.bg,
+        pointsize=pdf.pointsize,
+        res=300)
+  }
 
   par(mar = c(0, leftmar, topmar, 0),oma = c(1, 0.2, topoma, 0.2),new=FALSE)
 
   if (denmap & !is.null(sectcoldf$dens) ) {
+    layout(c(seq(1, nbrrows + 1)), heights = relheight)
+  } else if(noloci & !is.null(mapthis$segcol)) {
     layout(c(seq(1, nbrrows + 1)), heights = relheight)
   }
   else {
@@ -999,7 +1109,7 @@ lmv.linkage.plot <- function(mapthis,
       bty = "n"
     )
 
-    pin <- par("pin")[1]
+    pin <- par("pin")[1] #width of plot
 
     if (ruler) {
       axis(
@@ -1017,16 +1127,16 @@ lmv.linkage.plot <- function(mapthis,
     }
 
     # if last row put footnote
-    if (nr == nbrrows) {
-      mtext(
-        "Rendered by LinkageMapView",
-        side = 1,
-        cex = 0.5,
-        outer=TRUE,
-        col = pdf.fg,
-        adj = 0
-      )
-    }
+    #if (nr == nbrrows) {
+    #  mtext(
+    #    "Rendered by LinkageMapView",
+    #    side = 1,
+    #    cex = 0.5,
+    #    outer=TRUE,
+    #    col = pdf.fg,
+    #    adj = 0
+    #  )
+    #}
     # set up list for returned values from drawone
     # needed for placement of segments connecting markers
     # between linkage groups
@@ -1131,6 +1241,7 @@ lmv.linkage.plot <- function(mapthis,
           totwidth[nr],
           c(miny[nr], maxy[nr]),
           denmap = denmap,
+          noloci = noloci,
           maxnbrcolsfordups = maxnbrcolsfordups,
           pdf.width = pin,
           pdf.fg = pdf.fg,
@@ -1160,7 +1271,8 @@ lmv.linkage.plot <- function(mapthis,
           lgtitles = lgtitleone,
           segcol = segcol,
           showonly = showonly,
-          sectcoldf = sectcoldfone
+          sectcoldf = sectcoldfone,
+          jitterloci=jitterloci
         )
       yrlabwidth[[i]] <- dolist$yrlabwidth
       adjyr[[i]] <- dolist$adjyr
@@ -1416,5 +1528,54 @@ lmv.linkage.plot <- function(mapthis,
       cex.lab = .75
     )
 
+  } else if(noloci & !is.null(mapthis$segcol)) {
+#    par(mar = c(1, leftmar, 1, 1))
+#    mapthat <- mapthis[!duplicated(mapthis$locus),] %>%
+#                filter(!(locus %in% c("min","max")))
+#    space.in = pdf.width/(nrow(mapthat)+2)
+#    plot(c(0,pdf.width),
+#         c(0,addheight),
+#         ylim=c(addheight,0),
+#         type="n",
+#         cex=1,
+#         xaxt="n",
+#         yaxt="n",
+#         xlab="",
+#         ylab="",
+#         xaxs="i",
+#         bty="n")
+#    x <- seq(space.in,pdf.width,length.out=nrow(mapthat))
+#    y <- rep(legend_seg_height,nrow(mapthat))
+#    segments(x0=x,y0=rep(0,nrow(mapthat)),x1=x,y1=y,col=mapthat$segcol,lwd=(2*lg.lwd))
+#    text(x=x,y=legend_seg_height+strwidth("M",units="inches"),labels=mapthat$locus,srt=270,adj=0)
+    par(mar = c(1, leftmar, 1, 1))
+    mapthat <- mapthis[!duplicated(mapthis$locus),] %>%
+                filter(!(locus %in% c("min","max")))
+    plot(c(0,1),
+         c(0,1),
+         ylim=c(1,0),
+         type="n",
+         cex=1,
+         xaxt="n",
+         yaxt="n",
+         xlab="",
+         ylab="",
+         xaxs="i",
+         bty="n")
+    inchesPerUnitX = grconvertX(1, from = "user", to = "inches") - grconvertX(0, from = "user", to = "inches")
+    inchesPerUnitY = grconvertY(0, from = "user", to = "inches") - grconvertY(1, from = "user", to = "inches")
+    legend_seg_heightY = legend_seg_height/inchesPerUnitY
+    max_legend_spaceX = (lgw)/inchesPerUnitX
+    text_heightY = legend_seg_heightY + (strwidth("M",units="inches")/inchesPerUnitY)
+    x <- seq(0,0.9,length.out=nrow(mapthat))
+    xdist <- max(diff(x))
+    if( xdist > max_legend_spaceX ) {
+        x <- seq(0,0.9,by=max_legend_spaceX)[1:nrow(mapthat)]
+    }
+    x <- x + (lgw/inchesPerUnitX) # - (2*leftmar/96/inchesPerUnitX) #Center x
+    y <- rep(legend_seg_heightY,nrow(mapthat))
+    segments(x0=x,y0=rep(0,nrow(mapthat)),x1=x,y1=y,col=mapthat$segcol,lwd=1.5*lg.lwd)
+    text(x=x,y=text_heightY,labels=mapthat$locus,srt=295,adj=0)
   }
+  return(oldpar)
 }
