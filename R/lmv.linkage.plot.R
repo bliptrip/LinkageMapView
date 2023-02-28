@@ -1073,7 +1073,7 @@ lmv.linkage.plot <- function(mapthis,
   } else {
     png(outfile,
         width=pdf.width,
-        height=,
+        height=pdf.height,
         units="in",
         bg=pdf.bg,
         pointsize=pdf.pointsize,
