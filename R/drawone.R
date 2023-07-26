@@ -67,6 +67,15 @@ drawone <-
       lpos <- 4
       posmult <- -1
     }
+    if('index' %in% colnames(df)) {
+        lgcpct <- lgwpct/nlevels(df$index)
+        lgxstart <- pgx - lgwpct/2 #Starting x value for index 0
+        x3 <- lgxstart + (lgcpct * (as.integer(df$index)-1))
+        x4 <- lgxstart + (lgcpct * as.integer(df$index))
+    } else {
+        x3 <- x1
+        x4 <- x2
+    }
 
     if (!is.null(segcol)) {
       linesegcolor <- df[[eval(segcol)]]
@@ -254,34 +263,47 @@ drawone <-
             if (denmap)
             #lg.col overrides coloring same as adjcent color
             {
-            symbols(
-                x = pgx,
-                y = min(y),
-                circles = lgwpct / 2,
-                bg = sectcoldf$col[1],
-                add = TRUE,
-                fg = sectcoldf$col[1],
-                inches = FALSE
-            )
-            symbols(
-                x = pgx,
-                y = max(y),
-                circles = lgwpct / 2,
-                bg = sectcoldf$col[nrow(sectcoldf)],
-                add = TRUE,
-                fg = sectcoldf$col[nrow(sectcoldf)],
-                inches = FALSE
-            )
+                symbols(
+                    x = pgx,
+                    y = min(y),
+                    circles = lgwpct / 2,
+                    bg = sectcoldf$col[1],
+                    add = TRUE,
+                    fg = sectcoldf$col[1],
+                    inches = FALSE
+                )
+                symbols(
+                    x = pgx,
+                    y = max(y),
+                    circles = lgwpct / 2,
+                    bg = sectcoldf$col[nrow(sectcoldf)],
+                    add = TRUE,
+                    fg = sectcoldf$col[nrow(sectcoldf)],
+                    inches = FALSE
+                )
             }
-            for (sc in 1:nrow(sectcoldf)) {
-            rect(
-                pgx - lgwpct / 2,
-                sectcoldf$s,
-                pgx + lgwpct / 2,
-                sectcoldf$e,
-                col = sectcoldf$col,
-                border = NA
-            )
+            if('index' %in% colnames(sectcoldf)) {
+                lgcpct <- lgwpct/nlevels(sectcoldf$index)
+                lgxstart <- pgx - lgwpct/2 #Starting x value for index 0
+                rect(
+                    lgxstart + (lgcpct * (as.integer(sectcoldf$index)-1)),
+                    sectcoldf$s,
+                    lgxstart + (lgcpct * as.integer(sectcoldf$index)),
+                    sectcoldf$e,
+                    col = sectcoldf$col,
+                    border="lightgrey",
+                    lwd=0.25
+                )
+            }
+            else {
+                rect(
+                    pgx - lgwpct / 2,
+                    sectcoldf$s,
+                    pgx + lgwpct / 2,
+                    sectcoldf$e,
+                    col = sectcoldf$col,
+                    border = NA
+                )
             }
       }
     }
@@ -328,9 +350,9 @@ drawone <-
         segcolprt <- linesegcolor[setdiff(dups$rkeep, dups$frkeep)]
       }
       #connect across chromosome
-      segments(x1[setdiff(dups$rkeep, dups$frkeep)],
+      segments(x3[setdiff(dups$rkeep, dups$frkeep)],
                llab[setdiff(dups$rkeep, dups$frkeep)],
-               x2[setdiff(dups$rkeep, dups$frkeep)],
+               x4[setdiff(dups$rkeep, dups$frkeep)],
                llab[setdiff(dups$rkeep, dups$frkeep)], col = segcolprt)
 
       if (rsegcol) {
@@ -354,10 +376,11 @@ drawone <-
         }
 
         #connect across chromosome
-        segments(x1[dups$frkeep],
+        segments(x3[dups$frkeep],
                  llab[dups$frkeep],
-                 x2[dups$frkeep],
-                 llab[dups$frkeep], col = segcolprt)
+                 x4[dups$frkeep],
+                 llab[dups$frkeep], 
+                 col = segcolprt)
 
         #segments connecting dups vertically
         if (length(y[dups$rkeep]) > 1) {
@@ -411,9 +434,9 @@ drawone <-
       } else {
           yadj <- y
       }
-      segments(rep(x1[1], length.out = length(y)),
+      segments(x3,
                yadj,
-               rep(x2[1], length.out = length(y)),
+               x4,
                yadj,
                col = linesegcolor)
     }

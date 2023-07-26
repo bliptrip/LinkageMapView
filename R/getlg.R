@@ -9,7 +9,7 @@ getlg <- function(df, lg, dupnbr,roundpos) {
     # based on matching marker names.  That means we need to
     # set maxnbrcolsfordups <- 2 in lmv.linkage.plot.
 
-    templg <- subset(df, df[, 1] == lg)
+    templg <- df %>% filter(group == lg)
     # make sure linkage group is in order by position
     thislg <- templg[order(templg$position),]
     thislg$position <- round(thislg$position, roundpos)

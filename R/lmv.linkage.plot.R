@@ -13,11 +13,12 @@
 #'        \item Required, locus - marker name at this position.
 #'        \item Optional, segcol - color for the line across the chromosome
 #'              at this marker.  See also segcol parameter.
+#'        \item Optional, index - ordered factor indicating sub-lg division for section coloring
 #'      }
 #'
 #' @param outfile Required, name for the output pdf file.  
 #'
-#' @param dev.keepopen Optional.  Boolean that specifies whether to keep the pdf device open
+#' @param dev.keepopen Optional.  Boolean that specifies whether to keep the graphics device open
 #'          for further editing.  Default is FALSE.
 #'
 #' @param mapthese Optional vector of linkage group names to print.
@@ -164,7 +165,7 @@
 #'        locus labels appearing at duplicate positions.  The default is 3.
 #'
 #' @param render.type  Indicates the output format for the generated graphic.
-#'        Valid options are 'pdf', 'svg'.
+#'        Valid options are 'pdf', 'png', and 'svg'.
 #'        Default is 'pdf'.
 #'
 #' @param pdf.bg Background color for the pdf.  Default is "transparent".
@@ -242,6 +243,11 @@
 #'        drawn on the left hand side of the page and the position labels
 #'        are not printed on any linkage group.  The default is FALSE.
 #'
+#' @param lims A 2mer numeric vector specifying the hardcoded lower and upper bounds
+#'        of each row displaying the linkage groups, so as to have consistent scales
+#'        across rows and between images.  The default is NULL, which rescales each
+#'        row based on the maximal range of the linkage groups associated with that row.
+#'
 #' @param sectcoldf Optional data frame containing the following named columns
 #'       indicating sections of the chromosome to be colored:
 #'         \itemize{
@@ -252,6 +258,7 @@
 #'           \item Required, col - color for section
 #'           \item Optional, dens - a numeric cm / marker value used to print
 #'            the density map legend.
+#'           \item Optional, index - ordered factor indicating sub-lg division for section coloring
 #'          }
 #'        For a density map, use the lmvdencolor function to populate sectcoldf.
 #'        When denmap = TRUE and no sectcoldf parameter is supplied, lmvdencolor
@@ -504,6 +511,7 @@ lmv.linkage.plot <- function(mapthis,
                 roundpos = 1,
                 rsegcol = TRUE,
                 ruler = FALSE,
+                lims = NULL,
                 sectcoldf = NULL,
                 segcol = NULL,
                 qtlscanone = NULL,
@@ -515,6 +523,7 @@ lmv.linkage.plot <- function(mapthis,
                 )
 
 {
+  in2cm = 2.54 #conversion factor for inches to cm
   pgx <- 0.5   # where on page x-axis to draw
   pgy <- 0.5   # where on page y-axis to draw
 
@@ -656,8 +665,17 @@ lmv.linkage.plot <- function(mapthis,
   }
   # make sure sectcoldf data frame passed has no factors
   if (!is.null(sectcoldf)) {
+    sectcoldf.idx <- NULL
+    if( "index" %in% colnames(sectcoldf) ) {
+        sectcoldf.idx <- sectcoldf$index
+        sectcoldf <- sectcoldf %>% select(!index)
+    }
     fas <- sapply(sectcoldf, is.factor)
     sectcoldf[fas] <- lapply(sectcoldf[fas], as.character)
+    #Rebuild the dataframe
+    if(!is.null(sectcoldf.idx)) {
+        sectcoldf$index = sectcoldf.idx
+    }
   }
 
   # make sure vector of positioning requests is valid
@@ -711,7 +729,7 @@ lmv.linkage.plot <- function(mapthis,
   if (ruler) {
     leftmar <- 1 + ceiling(cex.axis)
     if (!is.null(units)) {
-      leftmar <- leftmar + 1
+      leftmar <- leftmar + 2
     }
   }
   else {
@@ -773,14 +791,11 @@ lmv.linkage.plot <- function(mapthis,
             units="in",
             bg=pdf.bg,
             pointsize=pdf.pointsize,
-            res=300)
+            res=150)
     }
     if(!dev.keepopen) {
         on.exit(dev.off(), add = TRUE)
     }
-
-  par(mar = c(0, leftmar, topmar, 0),oma = c(1, 0, topoma, 1),new=FALSE)
-
 
   lg <- list()
   dim <- list()
@@ -817,7 +832,7 @@ lmv.linkage.plot <- function(mapthis,
       # if user requested sections to be colored make list for this lg
       if (!is.null(sectcoldf))
       {
-        sectcol[[i]] <- subset(sectcoldf, sectcoldf$chr == lg[[i]][1, 1])
+        sectcol[[i]] <- sectcoldf %>% filter(chr == lg[[i]][1, "group"])
       }
     }
 
@@ -851,20 +866,14 @@ lmv.linkage.plot <- function(mapthis,
         }
       }
     }
-
-    # if user requested sections to be colored make list for this lg
-    if (!is.null(sectcoldf))
-    {
-      sectcol[[i]] <- subset(sectcoldf, sectcoldf$chr == lg[[i]][1, 1])
-    }
   }
 
 
   # -- Begin determine smallest and largest position for each row --------
 
+if(is.null(lims)) {
   miny <- vector(length = nbrrows)
   maxy <- vector(length = nbrrows)
-
 
   for (nr in 1:nbrrows) {
     fromlg <- (nr - 1) * lgperrow + 1
@@ -882,6 +891,10 @@ lmv.linkage.plot <- function(mapthis,
       }
     }
   }
+} else {
+  miny <- rep(lims[1], times=nbrrows)
+  maxy <- rep(lims[2], times=nbrrows)
+}
 
   # -- End determine smallest and largest position for each row ----------
 
@@ -962,13 +975,25 @@ lmv.linkage.plot <- function(mapthis,
 
   }
 
+  if(is.null(lg.minheight)) {
+    par(mar = c(0, leftmar, topmar, 0),oma = c(1, 0, topoma, 1),new=FALSE)
+  } else {
+    #Use absolute measures to eliminate issues with different scales
+    par(mai = c(0,0.5,0.35,0.1),omi = c(0.1,0.1,0.1,0.1),new=FALSE)
+  }
+
+
   # -- End loop for lg - apply formats & get required size -------------
 
   pgxlg <- vector(length = length(mapthese))
   width <- vector(length = length(mapthese))
 
   totwidth <- rep(0, nbrrows)
-  totheight <- rep(0, nbrrows)
+  if( (denmap || noloci) && !is.null(lg.minheight) ) {
+    totheight <- rep(lg.minheight, nbrrows)
+  } else {
+    totheight <- rep(0, nbrrows)
+  }
 
   for (nr in 1:nbrrows) {
     fromlg <- (nr - 1) * lgperrow + 1
@@ -994,25 +1019,25 @@ lmv.linkage.plot <- function(mapthis,
 
   allrowwidth <- max(totwidth)
   totheights <- sum(totheight)
+  maxrowheight=max(totheight)
   if( (denmap || noloci) && !is.null(lg.minheight) ) {
-      lgheight = max(lg.minheight,totheights)
+      lgheight = max((nbrrows*lg.minheight),totheights)
   } else {
       lgheight = totheights
   }
+
   if (denmap & !is.null(sectcoldf$dens)) {
     # add a one 1/2 inch row for density map legend
     allrowheight <- lgheight + 1.5
     relheight <- vector(length = (nbrrows + 1))
     relheight[(nbrrows + 1)] <- 1.5 / allrowheight
-  }
-  else if(noloci & !is.null(mapthis$segcol)) {
+  } else if(noloci & !is.null(mapthis$segcol)) {
     legend_seg_height = lgw
     addheight = legend_seg_height + max(strwidth(unique(mapthis$locus),units="inch")) + 0.25
     allrowheight <- lgheight + addheight
     relheight <- vector(length = (nbrrows + 1))
-    relheight[(nbrrows + 1)] <- addheight / allrowheight
-  }
-  else {
+    relheight[(nbrrows + 1)] <- addheight
+  } else {
     allrowheight <- lgheight
     relheight <- vector(length = nbrrows)
   }
@@ -1024,18 +1049,28 @@ lmv.linkage.plot <- function(mapthis,
     fromlg <- (nr - 1) * lgperrow + 1
     tolg <- min(c(length(mapthese),  nr * lgperrow))
 
-    maxrowheight <- 0
-    for (i in fromlg:tolg)    {
-      if (dim[[i]]$reqheight > maxrowheight) {
-        maxrowheight <- dim[[i]]$reqheight
-      }
+    if( (!denmap && !noloci) || is.null(lg.minheight) ) {
+        maxrowheight <- 0
+        for (i in fromlg:tolg)    {
+            if (dim[[i]]$reqheight > maxrowheight) {
+                maxrowheight <- dim[[i]]$reqheight
+            }
+        }
     }
-    relheight[nr] <- (lgheight*(maxrowheight/totheights)) / allrowheight #Rescale maxrowheight based on the required lgheight vs. calculated height
+    if( is.null(lg.minheight) ) {
+        relheight[nr] <- (lgheight*(maxrowheight/totheights)) / allrowheight #Rescale maxrowheight based on the required lgheight vs. calculated height
+    } else { #Use absolute heights
+        relheight[nr] <- lcm((lgheight/nbrrows)*in2cm)
+    }
   }
 
   # add in margins
   allrowwidth <- allrowwidth + par("mai")[2] + par("mai")[4] + par("omi")[2] + par("omi")[4]
-  allrowheight <- allrowheight + par("omi")[1] + par("omi")[3]
+  if( is.null(lg.minheight) ) {
+    allrowheight <- allrowheight + (par("omi")[1] + par("omi")[3]) # + nbrrows*(par("mai")[1]+par("mai")[2])
+  } else {
+    allrowheight <- allrowheight + (par("omi")[1] + par("omi")[3]) + nbrrows*(par("mai")[1]+par("mai")[2])
+  }
 
   # if user did not specify size, set to required size
   if (is.null(pdf.width)) {
@@ -1077,10 +1112,15 @@ lmv.linkage.plot <- function(mapthis,
         units="in",
         bg=pdf.bg,
         pointsize=pdf.pointsize,
-        res=300)
+        res=150)
   }
 
-  par(mar = c(0, leftmar, topmar, 0),oma = c(1, 0.2, topoma, 0.2),new=FALSE)
+  if(is.null(lg.minheight)) {
+    par(mar = c(0, leftmar, topmar, 0),oma = c(1, 0.2, topoma, 0.2),new=FALSE)
+  } else {
+    #Use absolute measures to eliminate issues with different scales
+    par(mai = c(0,0.5,0.35,0.1),omi = c(0.1,0.1,0.1,0.1),new=FALSE)
+  }
 
   if (denmap & !is.null(sectcoldf$dens) ) {
     layout(c(seq(1, nbrrows + 1)), heights = relheight)
@@ -1092,6 +1132,8 @@ lmv.linkage.plot <- function(mapthis,
   }
 
   # --- Begin loop for nbr rows to draw linkage groups -----------------
+  ogmar=par("mar")
+  ogmai=par("mai")
   for (nr in 1:nbrrows) {
     plot(
       .5,
@@ -1106,8 +1148,14 @@ lmv.linkage.plot <- function(mapthis,
       ylab = "",
       xaxs = "i",
       # don't pad x axis on each side
-      bty = "n"
+      bty = "n",
+      mar = ogmar
     )
+    #Use absolute measures to eliminate issues with different scales
+    #par(mar=ogmar, new=FALSE)
+    if(!is.null(lg.minheight)) {
+        par(mai = ogmai, cex = 1, new = FALSE)
+    }
 
     pin <- par("pin")[1] #width of plot
 
@@ -1548,7 +1596,7 @@ lmv.linkage.plot <- function(mapthis,
 #    y <- rep(legend_seg_height,nrow(mapthat))
 #    segments(x0=x,y0=rep(0,nrow(mapthat)),x1=x,y1=y,col=mapthat$segcol,lwd=(2*lg.lwd))
 #    text(x=x,y=legend_seg_height+strwidth("M",units="inches"),labels=mapthat$locus,srt=270,adj=0)
-    par(mar = c(1, leftmar, 1, 1))
+    #par(mar = c(1, leftmar, 1, 1))
     mapthat <- mapthis[!duplicated(mapthis$locus),] %>%
                 filter(!(locus %in% c("min","max")))
     plot(c(0,1),
@@ -1565,17 +1613,20 @@ lmv.linkage.plot <- function(mapthis,
     inchesPerUnitX = grconvertX(1, from = "user", to = "inches") - grconvertX(0, from = "user", to = "inches")
     inchesPerUnitY = grconvertY(0, from = "user", to = "inches") - grconvertY(1, from = "user", to = "inches")
     legend_seg_heightY = legend_seg_height/inchesPerUnitY
-    max_legend_spaceX = (lgw)/inchesPerUnitX
-    text_heightY = legend_seg_heightY + (strwidth("M",units="inches")/inchesPerUnitY)
-    x <- seq(0,0.9,length.out=nrow(mapthat))
+    max_legend_spaceX = (lgw*0.5)/inchesPerUnitX
+    segment_startY = 2*strheight("M", units="inches")/inchesPerUnitY
+    text_heightY = segment_startY + legend_seg_heightY + (strwidth("M",units="inches")/inchesPerUnitY)
+    x <- seq(0,0.4,length.out=nrow(mapthat))
     xdist <- max(diff(x))
     if( xdist > max_legend_spaceX ) {
-        x <- seq(0,0.9,by=max_legend_spaceX)[1:nrow(mapthat)]
+        x <- seq(0,0.4,by=max_legend_spaceX)[1:nrow(mapthat)]
     }
-    x <- x + (lgw/inchesPerUnitX) # - (2*leftmar/96/inchesPerUnitX) #Center x
-    y <- rep(legend_seg_heightY,nrow(mapthat))
-    segments(x0=x,y0=rep(0,nrow(mapthat)),x1=x,y1=y,col=mapthat$segcol,lwd=1.5*lg.lwd)
-    text(x=x,y=text_heightY,labels=mapthat$locus,srt=295,adj=0)
+    x <- x + (lgw/inchesPerUnitX) #Offset to left-align with first lg in row
+    xmid <- mean(x)
+    y <- rep(segment_startY + legend_seg_heightY,nrow(mapthat))
+    text(x=xmid,y=0,labels="Trait",adj=0.5,cex=1.2,font=2)
+    segments(x0=x,y0=rep(segment_startY,nrow(mapthat)),x1=x,y1=y,col=mapthat$segcol,lwd=1.5*lg.lwd)
+    text(x=x,y=text_heightY,labels=mapthat$locus,srt=295,adj=0,cex=0.8)
   }
   return(oldpar)
 }
